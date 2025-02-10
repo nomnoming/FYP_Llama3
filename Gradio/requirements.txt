@@ -1,0 +1,10 @@
+gradio
+requests
+pandas
+openpyxl
+numpy 
+spacy
+beautifulsoup4
+langchain_ollama
+langchain_community
+faiss-gpu-cu12
