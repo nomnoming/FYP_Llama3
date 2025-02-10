@@ -9,18 +9,15 @@ from openpyxl.styles import Font, Alignment
 from bs4 import BeautifulSoup
 from input_parser import parse_input
 
-
 nlp = spacy.load("en_core_web_sm")
 
 # Ollama Docker server details
 OLLAMA_SERVER_URL = "http://ollama:11434"  # It should work as it's on the same Docker network.
 
-import json
-import requests
-
 def query_ollama(parsed_input):
     """
-    Sends structured data to Ollama and returns the response.
+    Sends structured data to Ollama and returns the full, assembled response.
+    Handles fragmented responses from Ollama with enhanced error handling.
     """
     url = f"{OLLAMA_SERVER_URL}/api/generate"
 
@@ -38,17 +35,17 @@ def query_ollama(parsed_input):
 
     try:
         print(f"Sending request to Ollama: {json.dumps(payload, indent=2)}")  # Debugging log
-        response = requests.post(url, json=payload, timeout=60, stream=True)  # Set stream to True
+        response = requests.post(url, json=payload, timeout=120, stream=True)  # Increased timeout to 120s
 
         print(f"Response Status Code: {response.status_code}")  # Debugging log
-        print(f"Raw Response: {response.text}")  # Print raw response content for debugging
+        if response.status_code != 200:
+            print(f"Error: Ollama returned status code {response.status_code}")  # Log response code if not OK
+            return f"Error: Ollama returned status code {response.status_code}"
+
+        print(f"Raw Response: {response.text}")  # Debugging log
 
         # Initialize an empty string to store the full response
         full_response = ""
-
-        # Check if response content is empty before processing it
-        if not response.text.strip():
-            return "Error: Empty response from Ollama."
 
         # Read the streaming response content
         for chunk in response.iter_lines():
@@ -56,19 +53,25 @@ def query_ollama(parsed_input):
                 try:
                     chunk_data = json.loads(chunk.decode("utf-8"))
                     print(f"Chunk Response Data: {json.dumps(chunk_data, indent=2)}")  # Debugging log
-                    full_response += chunk_data.get("response", "")
-                except json.JSONDecodeError:
-                    print(f"Error: Failed to decode chunk. Raw chunk: {chunk.decode('utf-8')}")
+                    if 'response' in chunk_data:
+                        full_response += chunk_data['response']
+                    else:
+                        print(f"Warning: Missing 'response' field in chunk: {chunk_data}")
+                except json.JSONDecodeError as e:
+                    print(f"Error: Failed to decode chunk. Raw chunk: {chunk.decode('utf-8')}, Error: {str(e)}")
                     continue
 
-        # Final check to make sure there's some content
         if full_response.strip():
+            print(f"Final response: {full_response}")  # Debugging log
             return full_response.strip()
         else:
+            print("Error: No meaningful response from Ollama after assembling chunks.")  # Debugging log
             return "Error: No meaningful response from Ollama."
 
     except requests.exceptions.RequestException as e:
+        print(f"Request Exception: {e}")  # Log the error message for better debugging
         return f"Error communicating with Ollama: {e}"
+
 
 #------ handling the input and passing it through an input parser -----------------------
 def handle_gradio_input(user_input):
@@ -134,22 +137,21 @@ with gr.Blocks(theme=gr.themes.Citrus()) as demo:
 
     with gr.Row():
         with gr.Column():
-            input = gr.MultimodalTextbox(interactive=True, file_count="multiple", placeholder="Enter text or upload file")
-            # input=gr.Textbox(label="Prompt", placeholder="Enter text here")
+            input = gr.Textbox(label="Enter the Risk Assessment Prompt", placeholder="Enter threat, cause, risk, and consequences in the required format.")
             with gr.Row():
                 clear_button = gr.Button("Clear")
                 submit_button = gr.Button("Submit")
-            gr.Markdown("<b>How to chat with R.A.P:<b>")
+            gr.Markdown("<b>How to chat with R.A.P:</b>")
             gr.Markdown("The threat is: {Threat_Event}<br>This threat is caused by: {Vulnerability}<br>This puts the {Asset} at risk<br>Leading to consequences like: {Consequence}")
         with gr.Column():
-            output = gr.Textbox(label="Editable Output", interactive=True)
+            output = gr.Textbox(label="Ollama Response", interactive=True)
             export_button = gr.Button("Export Output - Excel")
             export_file = gr.File(label="Exported Edited Excel File")
             export_button.click(editable_export_excel, inputs=output, outputs=export_file)
 
         def prompt(question):
             print(f"Received input question: {question}")  # Debug: Log the user input
-            ollama_response = query_ollama(question)
+            ollama_response = handle_gradio_input(question)  # Send input through the parser and Ollama query
             return ollama_response
 
         def clear_input():
