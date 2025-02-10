@@ -1,0 +1,12 @@
+FROM ./unsloth.F16.gguf
+
+TEMPLATE """[[The threat is: {Threat_Event}]]
+[[This threat is caused by: {Vulnerability}]]
+[[This puts the {Asset} at risk]]
+[[Leading to consequences like: {Consequence}]]"""
+    
+PARAMETER stop "<|eot_id|>"
+PARAMETER stop "<|start_header_id|>"
+PARAMETER stop "<|end_header_id|>"
+PARAMETER stop "<|end_of_text|>"
+PARAMETER stop "<|reserved_special_token_"
