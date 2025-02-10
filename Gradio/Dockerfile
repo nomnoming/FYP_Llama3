@@ -5,9 +5,8 @@ FROM python:3.10-slim
 WORKDIR /app
 
 # Copy the Gradio script into the container
-COPY gradio_demo_050225.py .
+COPY gradio_UI.py .
 COPY requirements.txt .
-COPY radevpipe_rag.py .
 
 # Install required dependencies
 RUN pip install --no-cache-dir -r requirements.txt
@@ -19,4 +18,4 @@ RUN python -m spacy download en_core_web_sm
 EXPOSE 7860
 
 # Run the Gradio app
-CMD ["python", "gradio_demo_050225.py"]
+CMD ["python", "gradio_UI.py"]
